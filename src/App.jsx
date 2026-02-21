@@ -1,81 +1,133 @@
 import React, { useEffect, useState } from 'react'
 import ProfessorCard from './components/ProfessorCard'
-import sample from './data/professors'
+import Header from './components/Header'
+import Navbar from './components/Navbar'
+import StatsPanel from './components/StatsPanel'
+import Footer from './components/Footer'
+import professors from './data/professors'
 import './index.css'
 
-const LS_LIKES = 'rm_prof_likes'
-const LS_DISLIKES = 'rm_prof_dislikes'
+// LocalStorage key for persisting ratings
+const LS_RATINGS = 'rm_prof_ratings'
 
 function App() {
-  const [stack, setStack] = useState(sample)
-  const [likes, setLikes] = useState([])
-  const [dislikes, setDislikes] = useState([])
+  // State for the stack of professors to rate
+  const [stack, setStack] = useState(professors)
+  
+  // State for storing user ratings (key: professorId, value: rating 1-5)
+  const [ratings, setRatings] = useState({})
+  
+  // State for managing loading screen
+  const [isLoading, setIsLoading] = useState(true)
 
+  // Effect: Load saved ratings from localStorage on component mount
   useEffect(() => {
-    const savedLikes = JSON.parse(localStorage.getItem(LS_LIKES) || '[]')
-    const savedDislikes = JSON.parse(localStorage.getItem(LS_DISLIKES) || '[]')
-    setLikes(savedLikes)
-    setDislikes(savedDislikes)
+    // Simulate loading delay for better UX
+    const timer = setTimeout(() => {
+      const savedRatings = JSON.parse(localStorage.getItem(LS_RATINGS) || '{}')
+      setRatings(savedRatings)
+      setIsLoading(false)
+    }, 500)
+    return () => clearTimeout(timer)
   }, [])
 
+  // Effect: Save ratings to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem(LS_LIKES, JSON.stringify(likes))
-  }, [likes])
-  useEffect(() => {
-    localStorage.setItem(LS_DISLIKES, JSON.stringify(dislikes))
-  }, [dislikes])
+    localStorage.setItem(LS_RATINGS, JSON.stringify(ratings))
+  }, [ratings])
 
-  const handleSwipe = (dir, id) => {
-    const prof = stack.find((p) => p.id === id)
-    if (!prof) return
-    if (dir === 'like') setLikes((s) => [...s, id])
-    else setDislikes((s) => [...s, id])
+  // Handle rating submission - remove professor from stack and save rating
+  const handleRate = (rating, id) => {
+    setRatings((prev) => ({
+      ...prev,
+      [id]: rating
+    }))
     setStack((s) => s.filter((p) => p.id !== id))
   }
 
+  // Reset all data and start over
   const resetAll = () => {
-    setStack(sample)
-    setLikes([])
-    setDislikes([])
-    localStorage.removeItem(LS_LIKES)
-    localStorage.removeItem(LS_DISLIKES)
+    setStack(professors)
+    setRatings({})
+    localStorage.removeItem(LS_RATINGS)
   }
 
-  const top = stack[stack.length - 1]
+  // Calculate statistics
+  const ratedCount = Object.keys(ratings).length
+  const avgRating = ratedCount > 0
+    ? (Object.values(ratings).reduce((sum, r) => sum + r, 0) / ratedCount).toFixed(1)
+    : 0
+
+  // Show loading spinner while initializing
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="loading loading-spinner loading-lg text-primary mb-4"></div>
+          <p className="text-gray-600">Loading professors...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-50 to-white flex flex-col items-center p-6">
-      <h1 className="text-2xl font-bold mb-6">Rate My Professor — Tinder Style</h1>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex flex-col">
+      {/* Header Component - Title and Progress */}
+      <Header ratedCount={ratedCount} totalCount={professors.length} />
 
-      <div className="relative w-full max-w-xl h-[420px]">
-        {stack.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-lg">No more professors — you're done!</p>
-              <button onClick={resetAll} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Reset</button>
+      {/* Navbar Component - Navigation Buttons */}
+      <Navbar />
+
+      {/* Main Content Area */}
+      <div className="flex-1 max-w-2xl mx-auto w-full px-6 py-8">
+        {/* Card Container */}
+        <div className="relative w-full h-[500px] mb-8">
+          {/* Show completion screen when all professors have been rated */}
+          {stack.length === 0 ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white rounded-2xl shadow-2xl">
+              <div className="text-center">
+                <div className="text-6xl mb-4">🎉</div>
+                <p className="text-2xl font-bold text-gray-800 mb-2">
+                  You've Rated All Professors!
+                </p>
+                <p className="text-gray-600 mb-6">
+                  Your average rating:{' '}
+                  <span className="text-2xl font-bold text-purple-600">{avgRating} ⭐</span>
+                </p>
+                <button
+                  onClick={resetAll}
+                  className="btn btn-primary gap-2"
+                >
+                  🔄 Start Over
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            // Render only the top (current) professor card
+            stack.length > 0 && (
+              <ProfessorCard
+                key={stack[stack.length - 1].id}
+                professor={stack[stack.length - 1]}
+                onRate={handleRate}
+                zIndex={1}
+                isActive={true}
+              />
+            )
+          )}
+        </div>
 
-        {stack.map((prof, i) => (
-          <ProfessorCard
-            key={prof.id}
-            professor={prof}
-            onSwipe={handleSwipe}
-            zIndex={i}
+        {/* Stats Panel Component - Shows progress statistics */}
+        {stack.length > 0 && (
+          <StatsPanel
+            professorsLeft={stack.length}
+            ratedCount={ratedCount}
+            avgRating={avgRating}
           />
-        ))}
+        )}
       </div>
 
-      <div className="mt-6 flex gap-4 items-center">
-        <div className="text-sm text-gray-600">Likes: {likes.length}</div>
-        <div className="text-sm text-gray-600">Dislikes: {dislikes.length}</div>
-        <button onClick={resetAll} className="ml-4 px-3 py-1 border rounded">Reset</button>
-      </div>
-
-      <div className="mt-6 text-xs text-gray-500 max-w-xl text-center">
-        Tip: drag cards left or right to dislike or like. You can also press reset to start over.
-      </div>
+      {/* Footer Component - Helpful text */}
+      <Footer />
     </div>
   )
 }
